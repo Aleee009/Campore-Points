@@ -15,8 +15,9 @@ import {
   AccordionSummary,
   AccordionDetails
 } from '@mui/material';
-import { QrCode, Send, CheckCircle2, Star, ChevronDown, Trash2, Plus } from 'lucide-react';
+import { QrCode, Send, CheckCircle2, Star, ChevronDown, Trash2, Plus, Archive } from 'lucide-react';
 import Html5QrcodePlugin from './Html5QrcodePlugin';
+import { enqueuePayloads } from '../offlineQueue';
 
 // Reemplaza esta URL con la que obtengas al implementar el Google Apps Script
 const GAS_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwTwT_-ngPeQt3deqDE8omSL7MCsqHewTwpO5dEBfnnFNPBbr2DJm2RqS-Ypc5abRM_Fg/exec";
@@ -44,13 +45,13 @@ const TEAM_NAMES = {
   'C10': 'Betel'
 };
 
-export default function ScoringView({ config }) {
+export default function ScoringView({ config, onScoreQueued }) {
   const [teamInput, setTeamInput] = useState('');
   const [selectedTeams, setSelectedTeams] = useState([]); // Array de { code, name, puntuacion, puntuacionBiblia, puntuacionEjecucion }
   const [showScanner, setShowScanner] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitProgress, setSubmitProgress] = useState(''); // Mensaje de progreso
-  const [submitStatus, setSubmitStatus] = useState(null); // 'success' | 'error' | null
+  const [submitStatus, setSubmitStatus] = useState(null); // 'success' | 'queued' | 'error' | null
 
   // Determinar la etiqueta de la puntuación y el máximo de estrellas según la configuración del voluntario
   let ratingLabel = "Puntuación";
@@ -135,6 +136,52 @@ export default function ScoringView({ config }) {
     });
   };
 
+  /* ── Construir todos los payloads de una vez ── */
+  const buildPayloads = () => {
+    const basePayload = {
+      nombre: config.nombreCompleto,
+      codigoPrueba: config.codigoPrueba,
+      categoriaPrueba: config.seccion || ''
+    };
+
+    const payloads = [];
+
+    for (const team of selectedTeams) {
+      const teamPayload = { ...basePayload, equipo: team.code };
+
+      if (isCadetesVoluntario) {
+        payloads.push({ ...teamPayload, modalidad: 'biblia', puntuacion: team.puntuacionBiblia });
+        payloads.push({ ...teamPayload, modalidad: 'ejecucion', puntuacion: team.puntuacionEjecucion });
+      } else {
+        let modalidadCalculada = "";
+        if (config.seccion === 'Tizones') {
+          if (config.rol === 'Voluntario') modalidadCalculada = "ejecucion-grados";
+          else if (config.rol === 'Talleres') modalidadCalculada = "talleres";
+          else if (config.rol === 'Coordinador') modalidadCalculada = "biblia";
+        } else if (config.seccion === 'Cadetes') {
+          modalidadCalculada = config.rol === 'Talleres' ? "talleres" : "general";
+        } else {
+          modalidadCalculada = "general";
+        }
+        payloads.push({ ...teamPayload, modalidad: modalidadCalculada, puntuacion: team.puntuacion });
+      }
+    }
+
+    return payloads;
+  };
+
+  /* ── Enviar un payload individual ── */
+  const sendPayload = async (payload) => {
+    const response = await fetch(GAS_WEB_APP_URL, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+      headers: { 'Content-Type': 'application/json' },
+      mode: 'no-cors'
+    });
+    return response;
+  };
+
+  /* ── Submit principal con soporte offline ── */
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (isSubmitDisabled()) return;
@@ -142,97 +189,48 @@ export default function ScoringView({ config }) {
     setIsSubmitting(true);
     setSubmitStatus(null);
 
-    const basePayload = {
-      nombre: config.nombreCompleto,
-      codigoPrueba: config.codigoPrueba,
-      categoriaPrueba: config.seccion || ''
-    };
+    const payloads = buildPayloads();
 
+    // Si estamos offline, encolar directamente
+    if (!navigator.onLine) {
+      try {
+        setSubmitProgress('Sin conexión — guardando localmente…');
+        await enqueuePayloads(payloads);
+        setSubmitStatus('queued');
+        setSelectedTeams([]);
+        onScoreQueued?.();
+      } catch (err) {
+        console.error('[Offline] Error guardando en cola:', err);
+        setSubmitStatus('error');
+      } finally {
+        setIsSubmitting(false);
+        setSubmitProgress('');
+      }
+      return;
+    }
+
+    // Estamos online: intentar enviar
     try {
-      const totalTeams = selectedTeams.length;
-      
-      for (let i = 0; i < totalTeams; i++) {
-        const team = selectedTeams[i];
-        setSubmitProgress(`Enviando equipo ${i + 1} de ${totalTeams} (${team.code})...`);
-
-        const teamPayload = {
-          ...basePayload,
-          equipo: team.code
-        };
-
-        if (isCadetesVoluntario) {
-          // Envía 2 filas por equipo
-          const payloadBiblia = {
-            ...teamPayload,
-            modalidad: 'biblia',
-            puntuacion: team.puntuacionBiblia
-          };
-          const payloadEjecucion = {
-            ...teamPayload,
-            modalidad: 'ejecucion',
-            puntuacion: team.puntuacionEjecucion
-          };
-
-          if (GAS_WEB_APP_URL !== "LA_URL_DE_TU_SCRIPT_DE_GOOGLE") {
-            await fetch(GAS_WEB_APP_URL, {
-              method: 'POST',
-              body: JSON.stringify(payloadBiblia),
-              headers: { 'Content-Type': 'application/json' },
-              mode: 'no-cors'
-            });
-            await fetch(GAS_WEB_APP_URL, {
-              method: 'POST',
-              body: JSON.stringify(payloadEjecucion),
-              headers: { 'Content-Type': 'application/json' },
-              mode: 'no-cors'
-            });
-          }
-        } else {
-          // Envía 1 fila por equipo
-          let modalidadCalculada = "";
-          if (config.seccion === 'Tizones') {
-            if (config.rol === 'Voluntario') {
-              modalidadCalculada = "ejecucion-grados";
-            } else if (config.rol === 'Talleres') {
-              modalidadCalculada = "talleres";
-            } else if (config.rol === 'Coordinador') {
-              modalidadCalculada = "biblia";
-            }
-          } else if (config.seccion === 'Cadetes') {
-            if (config.rol === 'Talleres') {
-              modalidadCalculada = "talleres";
-            } else {
-              modalidadCalculada = "general";
-            }
-          } else {
-            modalidadCalculada = "general";
-          }
-
-          const payload = {
-            ...teamPayload,
-            modalidad: modalidadCalculada,
-            puntuacion: team.puntuacion
-          };
-
-          if (GAS_WEB_APP_URL !== "LA_URL_DE_TU_SCRIPT_DE_GOOGLE") {
-            await fetch(GAS_WEB_APP_URL, {
-              method: 'POST',
-              body: JSON.stringify(payload),
-              headers: { 'Content-Type': 'application/json' },
-              mode: 'no-cors'
-            });
-          }
-        }
+      for (let i = 0; i < payloads.length; i++) {
+        setSubmitProgress(`Enviando ${i + 1} de ${payloads.length}…`);
+        await sendPayload(payloads[i]);
       }
 
-      // Simular tiempo de espera mínimo por UX
-      await new Promise(resolve => setTimeout(resolve, 800));
-
+      await new Promise(resolve => setTimeout(resolve, 500));
       setSubmitStatus('success');
       setSelectedTeams([]);
     } catch (error) {
-      console.error(error);
-      setSubmitStatus('error');
+      // El fetch falló (red caída a mitad de envío, etc.) → encolar los restantes
+      console.warn('[Online] Fetch falló, encolando payloads:', error);
+      try {
+        await enqueuePayloads(payloads);
+        setSubmitStatus('queued');
+        setSelectedTeams([]);
+        onScoreQueued?.();
+      } catch (queueErr) {
+        console.error('[Offline] Error guardando en cola tras fallo:', queueErr);
+        setSubmitStatus('error');
+      }
     } finally {
       setIsSubmitting(false);
       setSubmitProgress('');
@@ -343,6 +341,12 @@ export default function ScoringView({ config }) {
       {submitStatus === 'success' && (
         <Alert icon={<CheckCircle2 size={24} />} severity="success" sx={{ mb: 2 }}>
           Todas las puntuaciones se han enviado correctamente.
+        </Alert>
+      )}
+
+      {submitStatus === 'queued' && (
+        <Alert icon={<Archive size={24} />} severity="info" sx={{ mb: 2 }}>
+          Puntuaciones guardadas localmente. Se enviarán automáticamente cuando haya conexión a internet.
         </Alert>
       )}
 
