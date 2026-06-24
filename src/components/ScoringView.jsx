@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import {
   Container,
   Paper,
@@ -10,45 +10,22 @@ import {
   CircularProgress,
   Alert,
   IconButton,
-  Collapse,
   Accordion,
   AccordionSummary,
   AccordionDetails
 } from '@mui/material';
 import { QrCode, Send, CheckCircle2, Star, ChevronDown, Trash2, Plus, Archive } from 'lucide-react';
-import Html5QrcodePlugin from './Html5QrcodePlugin';
+import QRScanner from './QRScanner';
 import { enqueuePayloads } from '../offlineQueue';
+import { TEAM_CODES } from '../data/codes';
 
 // Reemplaza esta URL con la que obtengas al implementar el Google Apps Script
-const GAS_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwTwT_-ngPeQt3deqDE8omSL7MCsqHewTwpO5dEBfnnFNPBbr2DJm2RqS-Ypc5abRM_Fg/exec";
-
-const TEAM_NAMES = {
-  'T01': 'Antorchas',
-  'T02': 'Roca Firme',
-  'T03': 'Senda Viva',
-  'T04': 'Linces de Betel',
-  'T05': 'Valientes',
-  'T06': 'Galilea',
-  'T07': 'Manantial',
-  'T08': 'Los Olivos',
-  'T09': 'Eden Camp',
-  'T10': 'Jerico',
-  'C01': 'Halcones del Norte',
-  'C02': 'Centinelas',
-  'C03': 'Embajadores',
-  'C04': 'Maranatha',
-  'C05': 'Sion',
-  'C06': 'Berea',
-  'C07': 'Orion',
-  'C08': 'Emanuel',
-  'C09': 'Nazaret',
-  'C10': 'Betel'
-};
+const GAS_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzLdE_jYuyUizGFIEyPDEWNwpLDGFXEx8pB_SYu5BDz8RYPD_m1lN0MWSbwwInqMuYn/exec";
 
 export default function ScoringView({ config, onScoreQueued }) {
   const [teamInput, setTeamInput] = useState('');
-  const [selectedTeams, setSelectedTeams] = useState([]); // Array de { code, name, puntuacion, puntuacionBiblia, puntuacionEjecucion }
-  const [showScanner, setShowScanner] = useState(false);
+  const [selectedTeams, setSelectedTeams] = useState([]); // Array de { code, club, iglesia, puntuacion, puntuacionBiblia, puntuacionEjecucion }
+  const [scannerPaused, setScannerPaused] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitProgress, setSubmitProgress] = useState(''); // Mensaje de progreso
   const [submitStatus, setSubmitStatus] = useState(null); // 'success' | 'queued' | 'error' | null
@@ -80,31 +57,37 @@ export default function ScoringView({ config, onScoreQueued }) {
     }
   }
 
-  const addTeamCode = (code) => {
+  const addTeamCode = useCallback((code) => {
     const cleanCode = code.trim().toUpperCase();
     if (!cleanCode) return;
-    if (selectedTeams.some(t => t.code === cleanCode)) {
-      alert('Este equipo ya ha sido añadido.');
-      return;
-    }
-    if (selectedTeams.length >= 4) {
-      alert('Solo puedes puntuar hasta 4 equipos a la vez.');
-      return;
-    }
 
-    const teamName = TEAM_NAMES[cleanCode] || 'Equipo no registrado';
-    setSelectedTeams(prev => [
-      ...prev,
-      {
-        code: cleanCode,
-        name: teamName,
-        puntuacion: 0,
-        puntuacionBiblia: 0,
-        puntuacionEjecucion: 0
+    setSelectedTeams(prev => {
+      if (prev.some(t => t.code === cleanCode)) {
+        alert('Este equipo ya ha sido añadido.');
+        return prev;
       }
-    ]);
+      if (prev.length >= 4) {
+        alert('Solo puedes puntuar hasta 4 equipos a la vez.');
+        return prev;
+      }
+
+      const teamData = TEAM_CODES[cleanCode];
+      const club = teamData?.club || 'Equipo no registrado';
+      const iglesia = teamData?.iglesia || '';
+      return [
+        ...prev,
+        {
+          code: cleanCode,
+          club,
+          iglesia,
+          puntuacion: 0,
+          puntuacionBiblia: 0,
+          puntuacionEjecucion: 0
+        }
+      ];
+    });
     setTeamInput('');
-  };
+  }, []);
 
   const removeTeam = (code, e) => {
     e.stopPropagation(); // Evitar expandir/colapsar el acordeón al pulsar borrar
@@ -119,10 +102,10 @@ export default function ScoringView({ config, onScoreQueued }) {
     setSelectedTeams(prev => prev.map(t => t.code === code ? { ...t, [field]: value } : t));
   };
 
-  const onNewScanResult = (decodedText) => {
+  const onNewScanResult = useCallback((decodedText) => {
     addTeamCode(decodedText);
-    setShowScanner(false);
-  };
+    setScannerPaused(true);
+  }, [addTeamCode]);
 
   const isSubmitDisabled = () => {
     if (selectedTeams.length === 0 || isSubmitting) return true;
@@ -402,13 +385,14 @@ export default function ScoringView({ config, onScoreQueued }) {
                   <Plus size={24} />
                 </IconButton>
                 <IconButton
-                  color={showScanner ? "primary" : "default"}
-                  onClick={() => setShowScanner(!showScanner)}
+                  color={scannerPaused ? "default" : "primary"}
+                  onClick={() => setScannerPaused(!scannerPaused)}
                   sx={{
                     border: '1px solid',
-                    borderColor: showScanner ? 'primary.main' : 'divider',
+                    borderColor: scannerPaused ? 'divider' : 'primary.main',
                     borderRadius: 2,
-                    p: 1.5
+                    p: 1.5,
+                    backgroundColor: scannerPaused ? 'transparent' : 'rgba(249, 115, 22, 0.1)'
                   }}
                 >
                   <QrCode size={24} />
@@ -416,16 +400,12 @@ export default function ScoringView({ config, onScoreQueued }) {
               </Box>
             </Box>
 
-            <Collapse in={showScanner}>
-              <Box sx={{ mt: 2, mb: 3, borderRadius: 2, overflow: 'hidden', border: '2px solid', borderColor: 'primary.main' }}>
-                <Html5QrcodePlugin
-                  fps={10}
-                  qrbox={250}
-                  disableFlip={false}
-                  qrCodeSuccessCallback={onNewScanResult}
-                />
-              </Box>
-            </Collapse>
+            <Box sx={{ mt: 2, mb: 3 }}>
+              <QRScanner
+                onScan={onNewScanResult}
+                paused={scannerPaused}
+              />
+            </Box>
 
             {/* Lista de Equipos con Acordeones */}
             {selectedTeams.length > 0 ? (
@@ -446,10 +426,10 @@ export default function ScoringView({ config, onScoreQueued }) {
                       <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center', pr: 1 }}>
                         <Box sx={{ textAlign: 'left' }}>
                           <Typography variant="subtitle2" fontWeight="bold">
-                            {team.code}
+                            {team.club}
                           </Typography>
                           <Typography variant="caption" color="text.secondary">
-                            {team.name}
+                            {team.iglesia}
                           </Typography>
                         </Box>
                         <IconButton 

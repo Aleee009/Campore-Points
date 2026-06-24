@@ -2,7 +2,7 @@ function doPost(e) {
   try {
     // Tomar la hoja de Google Sheets a la que está atado el script
     var doc = SpreadsheetApp.getActiveSpreadsheet();
-    var sheet = doc.getSheets()[0]; // Ocupamos la primera hoja del archivo
+    var sheet = doc.getSheetByName("PUNTUACION INPUT"); // Escribimos en la pestaña concreta
     
     // Parseamos los datos enviados por la app
     var data = JSON.parse(e.postData.contents);
@@ -56,7 +56,7 @@ function doPost(e) {
       
       if (header.indexOf('fecha') !== -1) {
         newRow.push(fechaYHora); // Guardado con Fecha y Hora exacta
-      } else if (header.indexOf('voluntario') !== -1 || header.indexOf('nombre') !== -1) {
+      } else if (header.indexOf('voluntario') !== -1 || header.indexOf('nombre') !== -1 || header.indexOf('responsable') !== -1) {
          newRow.push(data.nombre || '');
       } else if (header.indexOf('prueba') !== -1) {
          newRow.push(data.codigoPrueba || '');
