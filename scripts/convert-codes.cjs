@@ -12,24 +12,25 @@ function main() {
   }
 
   const workbook = XLSX.readFile(INPUT_FILE);
-  const sheetName = workbook.SheetNames[0];
-  const worksheet = workbook.Sheets[sheetName];
-
-  // Lee la hoja como array de arrays para tener control absoluto de columnas
-  const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
-
   const codes = {};
 
-  // Ignora la primera fila (encabezados)
-  for (let i = 1; i < rows.length; i++) {
-    const row = rows[i];
-    const code = String(row[0] || '').trim().toUpperCase();
-    const club = String(row[1] || '').trim();
-    const iglesia = String(row[2] || '').trim();
+  for (const sheetName of workbook.SheetNames) {
+    const worksheet = workbook.Sheets[sheetName];
 
-    if (!code) continue;
+    // Lee la hoja como array de arrays para tener control absoluto de columnas
+    const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
 
-    codes[code] = { club, iglesia };
+    // Ignora la primera fila (encabezados)
+    for (let i = 1; i < rows.length; i++) {
+      const row = rows[i];
+      const code = String(row[0] || '').trim().toUpperCase();
+      const club = String(row[1] || '').trim();
+      const iglesia = String(row[2] || '').trim();
+
+      if (!code) continue;
+
+      codes[code] = { club, iglesia };
+    }
   }
 
   const entries = Object.entries(codes);

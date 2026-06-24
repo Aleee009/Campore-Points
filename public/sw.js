@@ -66,16 +66,25 @@ async function syncPendingScores() {
 
   let failCount = 0;
 
-  for (const item of pending) {
+  for (let i = 0; i < pending.length; i++) {
+    const item = pending[i];
     try {
       const response = await fetch(GAS_URL, {
         method: 'POST',
         body: JSON.stringify(item.payload),
-        headers: { 'Content-Type': 'application/json' },
-        mode: 'no-cors'
+        headers: { 'Content-Type': 'application/json' }
       });
-      // mode: 'no-cors' siempre da status 0 / type opaque, lo cual es "éxito" para GAS
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
       await removePending(item.id);
+
+      // Pequeña pausa entre requests para evitar rate limiting de Google
+      if (i < pending.length - 1) {
+        await new Promise(resolve => setTimeout(resolve, 250));
+      }
     } catch (err) {
       console.warn('[SW] Error enviando puntuación pendiente:', err);
       failCount++;

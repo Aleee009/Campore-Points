@@ -13,12 +13,14 @@ function doPost(e) {
     // Variables para ubicar si existe un registro igual
     var colPrueba = -1;
     var colEquipo = -1;
+    var colModalidad = -1;
     
     // Buscar la posición exacta de cada columna
     for (var i = 0; i < headers.length; i++) {
         var header = headers[i].toString().toLowerCase();
         if (header.indexOf('prueba') !== -1) colPrueba = i;
         if (header.indexOf('equipo') !== -1) colEquipo = i;
+        if (header.indexOf('modalidad') !== -1) colModalidad = i;
     }
     
     var rowIndexToUpdate = -1;
@@ -34,12 +36,14 @@ function doPost(e) {
                  // Convertimos todo a minúsculas para que las comparaciones sean exactas
                  var valPrueba = currentData[r][colPrueba].toString().trim().toLowerCase();
                  var valEquipo = currentData[r][colEquipo].toString().trim().toLowerCase();
+                 var valModalidad = colModalidad !== -1 ? currentData[r][colModalidad].toString().trim().toLowerCase() : '';
                  
                  var insertPrueba = (data.codigoPrueba || '').toString().trim().toLowerCase();
                  var insertEquipo = (data.equipo || '').toString().trim().toLowerCase();
+                 var insertModalidad = (data.modalidad || '').toString().trim().toLowerCase();
                  
-                 // Si coinciden Prueba y Equipo, hemos encontrado la fila
-                 if (valPrueba === insertPrueba && valEquipo === insertEquipo) {
+                 // Si coinciden Prueba, Equipo y Modalidad, hemos encontrado la fila
+                 if (valPrueba === insertPrueba && valEquipo === insertEquipo && valModalidad === insertModalidad) {
                      rowIndexToUpdate = r + 2; // +2 porque r empieza en 0 y la primera fila (1) es el encabezado
                      break; 
                  }

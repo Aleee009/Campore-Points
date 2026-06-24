@@ -15,7 +15,7 @@ const pulseOverlay = keyframes`
   50% { opacity: 0.8; }
 `;
 
-const QRScanner = ({ onScan, paused = false }) => {
+const QRScanner = ({ onScan, paused = false, onRequestPause }) => {
   const scannerRef = useRef(null);
   const scanLockRef = useRef(false);
   const [cameras, setCameras] = useState([]);
@@ -357,6 +357,27 @@ const QRScanner = ({ onScan, paused = false }) => {
               size="small"
             >
               <SwitchCamera size={22} />
+            </IconButton>
+          )}
+
+          {/* Botón para detener el escaneo */}
+          {onRequestPause && (
+            <IconButton
+              onClick={onRequestPause}
+              sx={{
+                position: 'absolute',
+                top: 12,
+                left: 12,
+                backgroundColor: 'rgba(0,0,0,0.5)',
+                color: 'common.white',
+                backdropFilter: 'blur(4px)',
+                '&:hover': {
+                  backgroundColor: 'rgba(0,0,0,0.7)',
+                },
+              }}
+              size="small"
+            >
+              <CameraOff size={22} />
             </IconButton>
           )}
 

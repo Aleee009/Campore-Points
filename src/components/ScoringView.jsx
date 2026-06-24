@@ -158,9 +158,13 @@ export default function ScoringView({ config, onScoreQueued }) {
     const response = await fetch(GAS_WEB_APP_URL, {
       method: 'POST',
       body: JSON.stringify(payload),
-      headers: { 'Content-Type': 'application/json' },
-      mode: 'no-cors'
+      headers: { 'Content-Type': 'application/json' }
     });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+
     return response;
   };
 
@@ -192,21 +196,30 @@ export default function ScoringView({ config, onScoreQueued }) {
       return;
     }
 
-    // Estamos online: intentar enviar
+    // Estamos online: intentar enviar uno a uno con pausa entre ellos
+    const remaining = [...payloads];
     try {
-      for (let i = 0; i < payloads.length; i++) {
-        setSubmitProgress(`Enviando ${i + 1} de ${payloads.length}…`);
-        await sendPayload(payloads[i]);
+      while (remaining.length > 0) {
+        const payload = remaining.shift();
+        const sent = payloads.length - remaining.length;
+        setSubmitProgress(`Enviando ${sent} de ${payloads.length}…`);
+        await sendPayload(payload);
+
+        // Pequeña pausa entre requests para evitar rate limiting de Google
+        if (remaining.length > 0) {
+          await new Promise(resolve => setTimeout(resolve, 250));
+        }
       }
 
-      await new Promise(resolve => setTimeout(resolve, 500));
       setSubmitStatus('success');
       setSelectedTeams([]);
     } catch (error) {
-      // El fetch falló (red caída a mitad de envío, etc.) → encolar los restantes
-      console.warn('[Online] Fetch falló, encolando payloads:', error);
+      // El fetch falló (red caída a mitad de envío, rate limit, etc.) → encolar los restantes
+      console.warn('[Online] Fetch falló, encolando payloads restantes:', error);
       try {
-        await enqueuePayloads(payloads);
+        if (remaining.length > 0) {
+          await enqueuePayloads(remaining);
+        }
         setSubmitStatus('queued');
         setSelectedTeams([]);
         onScoreQueued?.();
@@ -404,6 +417,7 @@ export default function ScoringView({ config, onScoreQueued }) {
               <QRScanner
                 onScan={onNewScanResult}
                 paused={scannerPaused}
+                onRequestPause={() => setScannerPaused(true)}
               />
             </Box>
 
