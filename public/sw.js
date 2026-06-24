@@ -12,7 +12,7 @@ precacheAndRoute(self.__WB_MANIFEST);
 const DB_NAME = 'campore-offline-queue';
 const STORE_NAME = 'pending-scores';
 const SYNC_TAG = 'sync-scores';
-const GAS_URL = 'https://script.google.com/macros/s/AKfycbwTwT_-ngPeQt3deqDE8omSL7MCsqHewTwpO5dEBfnnFNPBbr2DJm2RqS-Ypc5abRM_Fg/exec';
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbzLdE_jYuyUizGFIEyPDEWNwpLDGFXEx8pB_SYu5BDz8RYPD_m1lN0MWSbwwInqMuYn/exec';
 
 /* ── IndexedDB helpers (duplicados en el SW porque no comparte módulos con la app) ── */
 function openDB() {
@@ -72,7 +72,7 @@ async function syncPendingScores() {
       const response = await fetch(GAS_URL, {
         method: 'POST',
         body: JSON.stringify(item.payload),
-        headers: { 'Content-Type': 'application/json' }
+        headers: { 'Content-Type': 'text/plain' }
       });
 
       if (!response.ok) {

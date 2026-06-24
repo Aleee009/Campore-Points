@@ -67,10 +67,10 @@ const QRScanner = ({ onScan, paused = false, onRequestPause }) => {
     scannerRef.current = scanner;
 
     return () => {
-      if (scannerRef.current) {
+        if (scannerRef.current) {
         const state = scannerRef.current.getState?.();
         if (state !== Html5QrcodeScannerState.NOT_STARTED) {
-          scannerRef.current.stop().catch(() => {});
+          Promise.resolve(scannerRef.current.stop()).catch(() => {});
         }
         scannerRef.current = null;
       }
@@ -136,7 +136,7 @@ const QRScanner = ({ onScan, paused = false, onRequestPause }) => {
     } else {
       const state = scanner.getState?.();
       if (state === Html5QrcodeScannerState.SCANNING) {
-        scanner.pause().catch(() => {});
+        Promise.resolve(scanner.pause()).catch(() => {});
       }
       // Diferir la actualización de estado para evitar setState síncrono en el effect
       Promise.resolve().then(() => setScanning(false));
